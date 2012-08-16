@@ -49,8 +49,10 @@ function getEvent(array $workout) {
 
 function output(array $events) {
     $calendar = array(
-        'prodid'  => PRODUCT_ID,
-        'version' => VERSION,
+        'version'       => VERSION,
+        'prodid'        => PRODUCT_ID,
+        'x-wr-calname'  => 'Workouts',
+        'x-wr-timezone' => 'Europe/London',
     );
 
     $output = array('BEGIN:VCALENDAR');
