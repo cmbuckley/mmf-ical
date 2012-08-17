@@ -78,4 +78,11 @@ function output(array $events) {
 }
 
 $events = array_map('getEvent', $workouts);
-echo implode("\r\n", output($events));
+$output = implode("\r\n", output($events));
+
+header('Content-Type: text/calendar');
+header('Cache-Control: no-cache, must-revalidate');
+header('Expires: Sat, 29 Sep 1984 15:00:00 GMT');
+header('Last-Modified: Sat, 29 Sep 1984 15:00:00 GMT');
+header('ETag: "' . md5($output) . '"');
+echo $output;
