@@ -1,88 +1,307 @@
 <?php
 
-define('PRODUCT_ID', '-//StarSquare//MapMyFITNESS//EN');
-define('VERSION', '2.0');
-define('API_TIMEZONE', 'America/Chicago');
-
-$url = array(
-    'scheme' => 'http',
-    'host'   => 'api.mapmyfitness.com',
-    'path'   => '/3.1/workouts/get_workouts',
-    'query'  => array(
-        'o'              => 'json',
-        'user_id'        => 563714,
-        'completed_flag' => 1,
-        'start_record'   => 0,
-        'limit'          => 100,
+CalendarRenderer::factory('workout', array(
+    'api' => array(
+        'scheme' => 'http',
+        'host' => 'api.mapmyfitness.com',
+        'version' => '3.1',
+        'paths' => array(
+            'workouts' => 'workouts/get_workouts',
+        ),
+        'format' => 'json',
+        'user' => 563714,
+        'timezone' => 'America/Chicago',
     ),
-);
+    'calendar' => array(
+        'version' => '2.0',
+        'timezone' => 'Europe/London',
+        'productId' => '-//StarSquare//MapMyFITNESS//EN',
+    ),
+))->render();
 
-$url['query'] = http_build_str($url['query']);
-$url = http_build_url($url);
+class FitnessApi {
+    protected $options;
 
-$response = json_decode(file_get_contents($url), true);
-$workouts = $response['result']['output']['workouts'];
-//var_dump($workouts);
-
-function getEventDate($date, $time = null) {
-    $dateTime = new DateTime(rtrim("$date $time"), new DateTimeZone(API_TIMEZONE));
-    $dateTime->setTimezone(new DateTimeZone('UTC'));
-    return $dateTime->format('Ymd\THis\Z');
-}
-
-function getEvent(array $workout) {
-    return array(
-        'dtstamp'     => getEventDate($workout['updated_date']),
-        'uid'         => $workout['user_id'] . ':WORKOUT:' . $workout['workout_id'],
-        'dtstart'     => getEventDate($workout['workout_date'], $workout['workout_start_time']),
-        'dtend'       => getEventDate($workout['workout_date'], $workout['workout_end_time']),
-        'created'     => getEventDate($workout['created_date']),
-        'description' => $workout['notes'],
-        'geo'         => '', // lat;lng from workout point[0]
-        'last-mod'    => getEventDate($workout['updated_date']),
-        'organizer'   => '', // user email
-        'status'      => ('1' == $workout['completed_flag'] ? 'CONFIRMED' : 'TENTATIVE'),
-        'summary'     => $workout['workout_description'],
-        'url'         => 'http://www.mapmyfitness.com/workout/' . $workout['workout_id'],
-    );
-}
-
-function output(array $events) {
-    $calendar = array(
-        'version'       => VERSION,
-        'prodid'        => PRODUCT_ID,
-        'x-wr-calname'  => 'Workouts',
-        'x-wr-timezone' => 'Europe/London',
-    );
-
-    $output = array('BEGIN:VCALENDAR');
-
-    foreach ($calendar as $property => $value) {
-        $output[] = strtoupper($property) . ':' . $value;
+    public function __construct($options) {
+        $this->options = $options;
     }
 
-    foreach ($events as $event) {
-        $output[] = 'BEGIN:VEVENT';
 
-        foreach ($event as $property => $value) {
-            if (!empty($value)) {
+    protected function getResponse($response) {
+        switch ($this->options->format) {
+            case 'json': return json_decode($response, true);
+            case 'php':  return unserialize($response);
+        }
+    }
+
+    protected function request($path, array $query = array()) {
+        if (!isset($this->options->paths->$path)) {
+            throw new Exception("Invalid path type [$path]");
+        }
+
+        $query['o'] = $this->options->format;
+        $query['user_id'] = $this->options->user;
+
+        $url = http_build_url(array(
+            'scheme' => $this->options->scheme,
+            'host' => $this->options->host,
+            'path' => '/' . $this->options->version . '/',
+        ), array(
+            'path' => $this->options->paths->$path,
+            'query' => http_build_query($query),
+        ), HTTP_URL_JOIN_PATH);
+
+        $response = $this->getResponse(file_get_contents($url));
+        if (!isset($response['result']['status']) || 1 != $response['result']['status']) {
+            $errors = (isset($response['result']['errors']) ? $response['result']['errors'] : array());
+            $message = 'API error';
+            if (count($errors) > 0) {
+                $message .= (count($errors) > 1 ? 's' : '') . ":\n" . implode("\n", $errors);
+            }
+
+            throw new Exception($message);
+        }
+
+        return $response['result']['output'];
+    }
+
+    protected function getWorkoutsByCompletedFlag($flag) {
+        $workouts = array();
+        $count = $start = null;
+        $page = 100;
+
+        while (null === $count || $count > count($workouts) || $start > $count) {
+            $output = $this->request('workouts', array(
+                'completed_flag' => $flag,
+                'limit' => $page,
+                'start_record' => (int) $start,
+            ));
+
+            $count = $output['count'];
+            $start += ($count > $page ? $page : 0);
+
+            foreach ($output['workouts'] as $workout) {
+                $workouts[$workout['workout_id']] = $workout;
+            }
+        }
+
+        return $workouts;
+    }
+
+    public function getWorkouts($completed = true, $pending = true) {
+        $workouts = array();
+
+        if ($pending) {
+            $workouts += $this->getWorkoutsByCompletedFlag(0);
+        }
+
+        if ($completed) {
+            $workouts += $this->getWorkoutsByCompletedFlag(1);
+        }
+
+        return $workouts;
+    }
+}
+
+abstract class Component {
+    abstract public function getStructure();
+
+}
+
+abstract class Calendar extends Component {
+    protected $options;
+    protected $api;
+    protected $name;
+
+    public function __construct(array $options) {
+        $this->options = json_decode(json_encode($options));
+    }
+
+    public function getApi() {
+        return (null === $this->api ? $this->api = new FitnessApi($this->options->api) : $this->api);
+    }
+
+    public function getStructure() {
+        return array('vcalendar' => array(
+            'version'       => $this->options->calendar->version,
+            'prodid'        => $this->options->calendar->productId,
+            'x-wr-calname'  => $this->name,
+            'x-wr-timezone' => $this->options->calendar->timezone,
+            'vtimezone'     => new Timezone($this->options->calendar->timezone),
+            'vevent'        => $this->getEvents(),
+        ));
+    }
+
+    abstract protected function getEvents();
+
+    public function getOutput() {
+        return $this->getOutputFromStructure($this->getStructure());
+    }
+
+    protected function getOutputFromStructure(array $structure, $overrideProperty = null) {
+        $output = array();
+
+        foreach ($structure as $property => $value) {
+            if (is_array($value)) {
+                $arrayStructure = $this->getOutputFromStructure($value, $property);
+
+                if (is_int($property) || null === $overrideProperty) {
+                    array_unshift($arrayStructure, 'BEGIN:' . strtoupper(is_int($property) ? $overrideProperty : $property));
+                    array_push($arrayStructure, 'END:' . strtoupper(is_int($property) ? $overrideProperty : $property));
+                }
+
+                $output = array_merge($output, $arrayStructure);
+            } elseif ($value instanceof Component) {
+                $componentStructure = $value->getStructure();
+
+                if (is_array($componentStructure)) {
+                    $output = array_merge(
+                        $output,
+                        array('BEGIN:' . strtoupper(is_int($property) ? $overrideProperty : $property)),
+                        $this->getOutputFromStructure($componentStructure),
+                        array('END:' . strtoupper(is_int($property) ? $overrideProperty : $property))
+                    );
+                }
+            } else {
                 $output[] = strtoupper($property) . ':' . $value;
             }
         }
 
-        $output[] = 'END:VEVENT';
+        return $output;
     }
-
-    $output[] = 'END:VCALENDAR';
-    return $output;
 }
 
-$events = array_map('getEvent', $workouts);
-$output = implode("\r\n", output($events));
+class WorkoutCalendar extends Calendar {
+    protected $name = 'Workouts';
 
-header('Content-Type: text/calendar');
-header('Cache-Control: no-cache, must-revalidate');
-header('Expires: Sat, 29 Sep 1984 15:00:00 GMT');
-header('Last-Modified: Sat, 29 Sep 1984 15:00:00 GMT');
-header('ETag: "' . md5($output) . '"');
-echo $output;
+    protected function getEvents() {
+        $events = array();
+
+        foreach ($this->getApi()->getWorkouts() as $workout) {
+            $workout['timezone'] = $this->options->api->timezone;
+            $events[] = new WorkoutEvent($workout);
+        }
+
+        return $events;
+    }
+}
+
+class Event extends Component {
+    protected $structure;
+    public function __construct(array $structure) {
+        $this->structure = $structure;
+    }
+
+    public function getStructure() {
+        return $this->structure;
+    }
+
+    protected function getDate($timezone, $date, $time = null) {
+        $dateTime = new DateTime("$date $time", new DateTimeZone($timezone));
+        $dateTime->setTimezone(new DateTimeZone('UTC'));
+        return $dateTime->format('Ymd\THis\Z');
+    }
+}
+
+class WorkoutEvent extends Event {
+    public function __construct($workout) {
+        return parent::__construct($this->build($workout));
+    }
+
+    protected function build(array $workout) {
+        return array(
+            'dtstamp'     => $this->getDate($workout['timezone'], $workout['updated_date']),
+            'uid'         => $workout['user_id'] . '-WORKOUT-' . $workout['workout_id'],
+            'dtstart'     => $this->getDate($workout['timezone'], $workout['workout_date'], $workout['workout_start_time']),
+            'dtend'       => $this->getDate($workout['timezone'], $workout['workout_date'], $workout['workout_end_time']),
+            'created'     => $this->getDate($workout['timezone'], $workout['created_date']),
+            'description' => $workout['notes'],
+            //'geo'         => '', // lat;lng from workout point[0]
+            'last-mod'    => $this->getDate($workout['timezone'], $workout['updated_date']),
+            //'organizer'   => '', // user email
+            'status'      => ('1' == $workout['completed_flag'] ? 'CONFIRMED' : 'TENTATIVE'),
+            'summary'     => $workout['workout_description'],
+            'url'         => 'http://www.mapmyfitness.com/workout/' . $workout['workout_id'],
+            'sequence'    => '0',
+            'transp'      => 'OPAQUE',
+        );
+    }
+}
+
+
+class Timezone extends Component {
+    protected $timezone;
+
+    public function __construct($timezone) {
+        $this->timezone = new DateTimeZone($timezone);
+    }
+    public function getStructure() {
+        return array(
+            'tzid' => $this->timezone->getName(),
+            'x-lic-location' => $this->timezone->getName(),
+        );
+    }
+}
+
+class CalendarRenderer {
+    protected $calendar;
+    protected $body;
+
+    public function __construct(Calendar $calendar) {
+        $this->calendar = $calendar;
+    }
+
+    public function getOutput() {
+        return array(
+            'headers' => $this->getHeaders(),
+            'body' => $this->getBody(),
+        );
+    }
+
+    public function getBody() {
+        if (null === $this->body) {
+            $this->body = implode("\r\n", $this->calendar->getOutput());
+        }
+
+        return $this->body;
+    }
+
+    public function render() {
+        $this->sendHeaders();
+        echo $this->getBody();
+    }
+
+    protected function sendHeaders() {
+        if (!headers_sent()) {
+            foreach ($this->getHeaders() as $name => $value) {
+                header("$name: $value");
+            }
+        }
+    }
+
+    public function getHeaders() {
+        return array(
+            'Content-Type' => 'text/calendar',
+            'Content-Type' => 'text/plain',
+            'Cache-Control' => 'no-cache, must-revalidate',
+            'Expires' => 'Sat, 29 Sep 1984 15:00:00 GMT',
+            'Last-Modified' => 'Sat, 29 Sep 1984 15:00:00 GMT',
+            'ETag' => '"' . md5($this->getBody()) . '"',
+        );
+    }
+
+    public function factory($type, array $options) {
+        $type = strtolower($type);
+        $types = array(
+            'workout' => 'WorkoutCalendar',
+        );
+
+        if (!isset($types[$type])) {
+            throw new Exception("Invalid calendar type [$type]");
+        }
+
+        $calendar = $types[$type];
+        $renderer = new static(new $calendar($options));
+        return $renderer;
+    }
+}
