@@ -16,6 +16,7 @@ CalendarRenderer::factory('workout', array(
         'version' => '2.0',
         'timezone' => 'Europe/London',
         'productId' => '-//StarSquare//MapMyFITNESS//EN',
+        'cache' => sys_get_temp_dir() . '/mmf-ics-cache',
     ),
 ))->render();
 
@@ -103,15 +104,46 @@ class FitnessApi {
     }
 }
 
+class EventCache {
+    protected $file;
+    protected $cache;
+
+    public function __construct($file) {
+        $this->file = $file;
+        $this->loadCache();
+    }
+
+    protected function loadCache() {
+        touch($this->file);
+        $this->cache = json_decode(file_get_contents($this->file), true);
+
+        if (null === $this->cache) {
+            $this->cache = array();
+        }
+    }
+
+    public function get($id) {
+        return (isset($this->cache[$id]) ? $this->cache[$id] : null);
+    }
+
+    public function set($id, array $data) {
+        $this->cache[$id] = $data;
+    }
+
+    public function save() {
+        file_put_contents($this->file, json_encode($this->cache));
+    }
+}
+
 abstract class Component {
     abstract public function getStructure();
-
 }
 
 abstract class Calendar extends Component {
     protected $options;
     protected $api;
     protected $name;
+    protected $cache;
 
     public function __construct(array $options) {
         $this->options = json_decode(json_encode($options));
@@ -130,6 +162,10 @@ abstract class Calendar extends Component {
             'vtimezone'     => new Timezone($this->options->calendar->timezone),
             'vevent'        => $this->getEvents(),
         ));
+    }
+
+    public function getCache() {
+        return (null === $this->cache ? $this->cache = new EventCache($this->options->calendar->cache) : $this->cache);
     }
 
     abstract protected function getEvents();
@@ -179,15 +215,17 @@ class WorkoutCalendar extends Calendar {
 
         foreach ($this->getApi()->getWorkouts() as $workout) {
             $workout['timezone'] = $this->options->api->timezone;
-            $events[] = new WorkoutEvent($workout);
+            $events[] = new WorkoutEvent($workout, $this);
         }
 
+        $this->getCache()->save();
         return $events;
     }
 }
 
 class Event extends Component {
     protected $structure;
+
     public function __construct(array $structure) {
         $this->structure = $structure;
     }
@@ -204,30 +242,52 @@ class Event extends Component {
 }
 
 class WorkoutEvent extends Event {
-    public function __construct($workout) {
-        return parent::__construct($this->build($workout));
+    protected $workout;
+    protected $calendar;
+
+    public function __construct(array $workout, WorkoutCalendar $calendar) {
+        $this->workout = $workout;
+        $this->calendar = $calendar;
+
+        return parent::__construct($this->build($this->workout));
+    }
+
+    protected function cache(array $structure) {
+        $id    = $this->workout['workout_id'];
+        $cache = $this->calendar->getCache();
+        $data  = $cache->get($id);
+
+        if (null === $data || $structure['last-modified'] > $data['last-modified']) {
+            $data = array(
+                'last-modified' => $structure['last-modified'],
+                'sequence'      => (null === $data ? 0 : $data['sequence'] + 1),
+            );
+        }
+
+        $cache->set($id, $data);
+        $structure['sequence'] = $data['sequence'];
+        return $structure;
     }
 
     protected function build(array $workout) {
-        return array(
-            'dtstamp'     => $this->getDate($workout['timezone'], $workout['updated_date']),
-            'uid'         => $workout['user_id'] . '-WORKOUT-' . $workout['workout_id'],
-            'dtstart'     => $this->getDate($workout['timezone'], $workout['workout_date'], $workout['workout_start_time']),
-            'dtend'       => $this->getDate($workout['timezone'], $workout['workout_date'], $workout['workout_end_time']),
-            'created'     => $this->getDate($workout['timezone'], $workout['created_date']),
-            'description' => $workout['notes'],
+        return $this->cache(array(
+            'dtstamp'       => $this->getDate($workout['timezone'], $workout['updated_date']),
+            'uid'           => $workout['user_id'] . '-WORKOUT-' . $workout['workout_id'],
+            'dtstart'       => $this->getDate($workout['timezone'], $workout['workout_date'], $workout['workout_start_time']),
+            'dtend'         => $this->getDate($workout['timezone'], $workout['workout_date'], $workout['workout_end_time']),
+            'created'       => $this->getDate($workout['timezone'], $workout['created_date']),
+            'description'   => $workout['notes'],
             //'geo'         => '', // lat;lng from workout point[0]
-            'last-mod'    => $this->getDate($workout['timezone'], $workout['updated_date']),
+            'last-modified' => $this->getDate($workout['timezone'], $workout['updated_date']),
             //'organizer'   => '', // user email
-            'status'      => ('1' == $workout['completed_flag'] ? 'CONFIRMED' : 'TENTATIVE'),
-            'summary'     => $workout['workout_description'],
-            'url'         => 'http://www.mapmyfitness.com/workout/' . $workout['workout_id'],
-            'sequence'    => '0',
-            'transp'      => 'OPAQUE',
-        );
+            'status'        => ('1' == $workout['completed_flag'] ? 'CONFIRMED' : 'TENTATIVE'),
+            'summary'       => $workout['workout_description'],
+            'url'           => 'http://www.mapmyfitness.com/workout/' . $workout['workout_id'],
+            'sequence'      => '0',
+            'transp'        => 'OPAQUE',
+        ));
     }
 }
-
 
 class Timezone extends Component {
     protected $timezone;
@@ -290,7 +350,7 @@ class CalendarRenderer {
         );
     }
 
-    public function factory($type, array $options) {
+    public static function factory($type, array $options) {
         $type = strtolower($type);
         $types = array(
             'workout' => 'WorkoutCalendar',
