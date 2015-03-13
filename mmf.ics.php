@@ -10,7 +10,7 @@ CalendarRenderer::factory('workout', array(
         ),
         'format' => 'json',
         'user' => 563714,
-        'timezone' => 'America/Chicago',
+        'time_offset' => '5 hours',
     ),
     'calendar' => array(
         'version' => '2.0',
@@ -214,7 +214,7 @@ class WorkoutCalendar extends Calendar {
         $events = array();
 
         foreach ($this->getApi()->getWorkouts() as $workout) {
-            $workout['timezone'] = $this->options->api->timezone;
+            $workout['time_offset'] = $this->options->api->time_offset;
             $events[] = new WorkoutEvent($workout, $this);
         }
 
@@ -234,9 +234,9 @@ class Event extends Component {
         return $this->structure;
     }
 
-    protected function getDate($timezone, $date, $time = null) {
-        $dateTime = new DateTime("$date $time", new DateTimeZone($timezone));
-        $dateTime->setTimezone(new DateTimeZone('UTC'));
+    protected function getDate($offset, $date, $time = null) {
+        $dateTime = new DateTime("$date $time", new DateTimeZone('UTC'));
+        $dateTime->modify($offset);
         return $dateTime->format('Ymd\THis\Z');
     }
 }
@@ -271,14 +271,14 @@ class WorkoutEvent extends Event {
 
     protected function build(array $workout) {
         return $this->cache(array(
-            'dtstamp'       => $this->getDate($workout['timezone'], $workout['updated_date']),
+            'dtstamp'       => $this->getDate($workout['time_offset'], $workout['updated_date']),
             'uid'           => $workout['user_id'] . '-WORKOUT-' . $workout['workout_id'],
-            'dtstart'       => $this->getDate($workout['timezone'], $workout['workout_date'], $workout['workout_start_time']),
-            'dtend'         => $this->getDate($workout['timezone'], $workout['workout_date'], $workout['workout_end_time']),
-            'created'       => $this->getDate($workout['timezone'], $workout['created_date']),
+            'dtstart'       => $this->getDate($workout['time_offset'], $workout['workout_date'], $workout['workout_start_time']),
+            'dtend'         => $this->getDate($workout['time_offset'], $workout['workout_date'], $workout['workout_end_time']),
+            'created'       => $this->getDate($workout['time_offset'], $workout['created_date']),
             'description'   => $workout['notes'],
             //'geo'         => '', // lat;lng from workout point[0]
-            'last-modified' => $this->getDate($workout['timezone'], $workout['updated_date']),
+            'last-modified' => $this->getDate($workout['time_offset'], $workout['updated_date']),
             //'organizer'   => '', // user email
             'status'        => ('1' == $workout['completed_flag'] ? 'CONFIRMED' : 'TENTATIVE'),
             'summary'       => $workout['workout_description'],
