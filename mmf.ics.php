@@ -1,6 +1,7 @@
 <?php
 
 CalendarRenderer::factory('workout', array(
+    'debug' => (isset($_GET['v']) && $_GET['v'] == 'debug'),
     'api' => array(
         'scheme' => 'http',
         'host' => 'api.mapmyfitness.com',
@@ -162,6 +163,14 @@ abstract class Calendar extends Component {
             'vtimezone'     => new Timezone($this->options->calendar->timezone),
             'vevent'        => $this->getEvents(),
         ));
+    }
+
+    public function getOptions() {
+        return $this->options;
+    }
+
+    public function getOption($option, $default = null) {
+        return isset($this->options->$option) ? $this->options->$option : $default;
     }
 
     public function getCache() {
