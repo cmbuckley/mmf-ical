@@ -25,14 +25,9 @@ class FitnessApi {
         $query['o'] = $this->options->format;
         $query['user_id'] = $this->options->user;
 
-        $url = http_build_url(array(
-            'scheme' => $this->options->scheme,
-            'host'   => $this->options->host,
-            'path'   => '/' . $this->options->version . '/',
-        ), array(
-            'path'  => $this->options->paths->$path,
-            'query' => http_build_query($query),
-        ), HTTP_URL_JOIN_PATH);
+        $url = $this->options->scheme . '://' . $this->options->host
+             . '/' . $this->options->version . '/' . $this->options->paths->$path
+             . '?' . http_build_query($query);
 
         $response = $this->getResponse(file_get_contents($url));
         if (!isset($response['result']['status']) || 1 != $response['result']['status']) {
