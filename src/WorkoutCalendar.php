@@ -4,6 +4,7 @@ namespace Starsquare\Mmf;
 
 class WorkoutCalendar extends Calendar {
     protected $name = 'Workouts';
+    protected $description = 'Workout calendar for workouts logged in MapMyFitness';
 
     protected function getEvents() {
         $events = array();

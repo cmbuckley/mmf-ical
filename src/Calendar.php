@@ -6,6 +6,7 @@ abstract class Calendar extends Component {
     protected $options;
     protected $api;
     protected $name;
+    protected $description;
     protected $cache;
 
     public function __construct(array $options) {
@@ -20,7 +21,10 @@ abstract class Calendar extends Component {
         return array('vcalendar' => array(
             'version'       => $this->options->calendar->version,
             'prodid'        => $this->options->calendar->productId,
+            'name'          => $this->name,
             'x-wr-calname'  => $this->name,
+            'description'   => $this->description,
+            'x-wr-caldesc'  => $this->description,
             'x-wr-timezone' => $this->options->calendar->timezone,
             'vtimezone'     => new Timezone($this->options->calendar->timezone),
             'vevent'        => $this->getEvents(),
