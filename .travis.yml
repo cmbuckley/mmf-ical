@@ -6,3 +6,4 @@ deploy:
 before_script:
   - composer self-update
   - composer install --dev
+script: true
