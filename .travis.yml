@@ -1,4 +1,8 @@
+language: php
 deploy:
   provider: heroku
   api_key:
     secure: YAciI/2otsqMZqBifWyu/IMsrooJyC6y7ENR78VIIhvtnnDGpv1n9pOpJdxt89ZE9nbwUPCLy4hvnGcfRYbqj5L93rlnGuwhCt0/i7Fwtjb2c9ho4hj9Ky0KQD3x5Zrb0tsOA5/Srobs7cdBseKGhSssY/4XoZFEYjp0LEDFtGA=
+before_script:
+  - composer self-update
+  - composer install --dev
