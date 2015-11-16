@@ -1,0 +1,28 @@
+{
+    "name": "cmbuckley/mmf-ical",
+    "description": "MapMyFitness iCal exporter",
+    "version": "0.1",
+    "type": "library",
+    "keywords": ["mapmyfitness", "ical", "ics"],
+    "homepage": "http://cmbuckley.github.io/mmf-ical",
+    "authors": [
+        {
+            "name": "Chris Buckley",
+            "email": "chris@cmbuckley.co.uk",
+            "homepage": "http://cmbuckley.co.uk"
+        }
+    ],
+    "support": {
+        "email": "mmf-ical@starsquare.co.uk",
+        "issues": "https://github.com/cmbuckley/mmf-ical/issues",
+        "source": "https://github.com/cmbuckley/mmf-ical"
+    },
+    "require": {
+        "php" : ">=5.3.2"
+    },
+    "autoload": {
+        "psr-4": {
+            "Starsquare\\Mmf\\": "src/"
+        }
+    }
+}
