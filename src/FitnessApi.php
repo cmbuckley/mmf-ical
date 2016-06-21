@@ -33,8 +33,12 @@ class FitnessApi {
         if (!isset($response['result']['status']) || 1 != $response['result']['status']) {
             $errors = (isset($response['result']['errors']) ? $response['result']['errors'] : array());
             $message = 'API error';
+
             if (count($errors) > 0) {
                 $message .= (count($errors) > 1 ? 's' : '') . ":\n" . implode("\n", $errors);
+            }
+            elseif (null !== ($last = error_get_last())) {
+                $message .= ': ' . $last['message'];
             }
 
             throw new Exception($message);
