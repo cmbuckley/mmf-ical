@@ -5,6 +5,11 @@ namespace Starsquare\Mmf;
 class WorkoutCalendar extends Calendar {
     protected $name = 'Workouts';
     protected $description = 'Workout calendar for workouts logged in MapMyFitness';
+    protected $api;
+
+    public function getApi() {
+        return (null === $this->api ? $this->api = new FitnessApi($this->options->api) : $this->api);
+    }
 
     protected function getEvents() {
         $events = array();

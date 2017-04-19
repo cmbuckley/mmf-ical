@@ -4,17 +4,12 @@ namespace Starsquare\Mmf;
 
 abstract class Calendar extends Component {
     protected $options;
-    protected $api;
     protected $name;
     protected $description;
     protected $cache;
 
     public function __construct(array $options) {
         $this->options = json_decode(json_encode($options));
-    }
-
-    public function getApi() {
-        return (null === $this->api ? $this->api = new FitnessApi($this->options->api) : $this->api);
     }
 
     public function getStructure() {
