@@ -52,7 +52,7 @@ class CalendarRenderer {
     public static function factory($type, array $options) {
         $type = strtolower($type);
         $types = array(
-            'workout' => __NAMESPACE__ . '\\WorkoutCalendar',
+            'workout' => WorkoutCalendar::class,
         );
 
         if (!isset($types[$type])) {
