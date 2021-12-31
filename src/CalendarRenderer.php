@@ -3,31 +3,61 @@
 namespace Starsquare\Mmf;
 
 class CalendarRenderer {
+    protected $options;
     protected $calendar;
-    protected $body;
+    protected $api;
 
-    public function __construct(Calendar $calendar) {
-        $this->calendar = $calendar;
+    public function __construct(array $options) {
+        $this->options = $options;
     }
 
-    public function getOutput() {
-        return array(
-            'headers' => $this->getHeaders(),
-            'body'    => $this->getBody(),
-        );
+    public function __toString() {
+        try {
+            $output = $this->getBody();
+            $this->sendHeaders();
+            return (string) $output;
+        } catch (\Exception $ex) {
+            return (string) $ex;
+        }
+    }
+
+    public function getApi() {
+        return (null === $this->api ? $this->api = new UnderArmourApi($this->options['api']) : $this->api);
+    }
+
+    public function getCalendar() {
+        return (null === $this->calendar ? $this->calendar = new Calendar($this->options['calendar']) : $this->calendar);
     }
 
     public function getBody() {
-        if (null === $this->body) {
-            $this->body = implode("\r\n", $this->calendar->getOutput());
+        $api = $this->getApi();
+
+        if ($api->isAuthenticated()) {
+            $calendar = $this->getCalendar();
+            $workouts = $api->getWorkouts();
+            var_dump($workouts);
+            exit;
+            $calendar->setEvents($workouts);
+            return $calendar->getOutput();
         }
 
-        return $this->body;
+		return $this->getTemplate('login.php', [
+            'authorize_url' => $api->getAuthorizationUrl(),
+		]);
     }
 
-    public function render() {
-        $this->sendHeaders();
-        echo $this->getBody();
+    protected function getTemplate($template, array $data) {
+        try {
+            ob_start();
+			extract($data);
+			include $this->options['templatePath'] . '/' . $template;
+            $output = ob_get_clean();
+        } catch (Throwable $e) {
+            ob_end_clean();
+            throw $e;
+        }
+
+		return $output;
     }
 
     protected function sendHeaders() {
@@ -39,28 +69,16 @@ class CalendarRenderer {
     }
 
     public function getHeaders() {
+        if (!$this->getApi()->isAuthenticated()) {
+            return [];
+        }
+
         return array(
-            'Content-Type'  => 'text/calendar',
             'Content-Type'  => 'text/plain',
             'Cache-Control' => 'no-cache, must-revalidate',
             'Expires'       => 'Sat, 29 Sep 1984 15:00:00 GMT',
             'Last-Modified' => 'Sat, 29 Sep 1984 15:00:00 GMT',
             'ETag'          => '"' . md5($this->getBody()) . '"',
         );
-    }
-
-    public static function factory($type, array $options) {
-        $type = strtolower($type);
-        $types = array(
-            'workout' => WorkoutCalendar::class,
-        );
-
-        if (!isset($types[$type])) {
-            throw new Exception("Invalid calendar type [$type]");
-        }
-
-        $calendar = $types[$type];
-        $renderer = new static(new $calendar($options));
-        return $renderer;
     }
 }

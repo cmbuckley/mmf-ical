@@ -2,43 +2,45 @@
 
 namespace Starsquare\Mmf;
 
-abstract class Calendar extends Component {
+class Calendar extends Component {
     protected $options;
     protected $name;
     protected $description;
     protected $cache;
 
     public function __construct(array $options) {
-        $this->options = json_decode(json_encode($options));
+        $this->options = $options;
     }
 
     public function getStructure() {
         return array('vcalendar' => array(
-            'version'       => $this->options->calendar->version,
-            'prodid'        => $this->options->calendar->productId,
+            'version'       => $this->options['version'],
+            'prodid'        => $this->options['productId'],
             'name'          => $this->name,
             'x-wr-calname'  => $this->name,
             'description'   => $this->description,
             'x-wr-caldesc'  => $this->description,
-            'x-wr-timezone' => $this->options->calendar->timezone,
-            'vtimezone'     => new Timezone($this->options->calendar->timezone),
+            'x-wr-timezone' => $this->options['timezone'],
+            'vtimezone'     => new Timezone($this->options['timezone']),
             'vevent'        => $this->getEvents(),
         ));
     }
 
-    public function getOptions() {
-        return $this->options;
+    public function setEvents(array $events) {
+        $this->events = $events;
     }
 
-    public function getOption($option, $default = null) {
-        return isset($this->options->$option) ? $this->options->$option : $default;
-    }
+    public function getEvents() {
+        $events = array();
 
-    public function getCache() {
-        return (null === $this->cache ? $this->cache = new EventCache($this->options->calendar->cache) : $this->cache);
-    }
+        foreach ($this->getApi()->getWorkouts() as $workout) {
+            $workout['time_offset'] = $this->options->api->time_offset;
+            $events[] = new WorkoutEvent($workout, $this);
+        }
 
-    abstract protected function getEvents();
+        $this->getCache()->save();
+        return $events;
+    }
 
     public function getOutput() {
         return $this->getOutputFromStructure($this->getStructure());

@@ -2,23 +2,21 @@
 
 require '../vendor/autoload.php';
 
-Starsquare\Mmf\CalendarRenderer::factory('workout', array(
-    'debug' => (isset($_GET['v']) && $_GET['v'] == 'debug'),
+echo new Starsquare\Mmf\CalendarRenderer(array(
     'api' => array(
-        'scheme' => 'http',
-        'host' => 'api.mapmyfitness.com',
-        'version' => '3.1',
-        'paths' => array(
-            'workouts' => 'workouts/get_workouts',
+        'provider' => array(
+            'clientId' => getenv('API_CLIENT'),
+            'clientSecret' => getenv('API_SECRET'),
+            'redirectUri' => getenv('REDIRECT_URI'),
         ),
-        'format' => 'json',
-        'user' => 563714,
-        'time_offset' => '5 hours',
+        'code' => (isset($_GET['code']) ? $_GET['code'] : null),
+        'state' => (isset($_GET['state']) ? $_GET['state'] : null),
+        'session' => (new \Aura\Session\SessionFactory)->newInstance($_COOKIE),
     ),
     'calendar' => array(
         'version' => '2.0',
         'timezone' => 'Europe/London',
-        'productId' => '-//StarSquare//MapMyFITNESS//EN',
-        'cache' => sys_get_temp_dir() . '/mmf-ics-cache',
+        'productId' => sprintf('-//StarSquare//MapMyFITNESS//%s//EN', '0.1'),
     ),
-))->render();
+    'templatePath' => realpath(__DIR__ . '/../tpl'),
+));

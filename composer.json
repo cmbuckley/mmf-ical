@@ -18,8 +18,10 @@
         "source": "https://github.com/cmbuckley/mmf-ical"
     },
     "require": {
-        "php" : "^5.5",
-        "predis/predis": "^1.1"
+        "php" : "^7 || ^8",
+        "predis/predis": "^1.1",
+        "league/oauth2-client": "^2.6",
+        "aura/session": "^2.1"
     },
     "autoload": {
         "psr-4": {
